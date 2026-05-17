@@ -1,4 +1,4 @@
-﻿asgiref==3.11.1
+asgiref==3.11.1
 boto3==1.43.9
 botocore==1.43.9
 dj-database-url==3.1.2
