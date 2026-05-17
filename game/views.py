@@ -48,8 +48,8 @@ def campaign_dashboard(request):
             map_file = request.FILES.get('map_file')
             
             if map_name and map_file:
-                # Save new file directly into Supabase via django-storages
-                new_asset = BackgroundAsset.objects.create(name=map_name, image=map_file)
+                # Use .title here to align with your existing BackgroundAsset database structure
+                new_asset = BackgroundAsset.objects.create(title=map_name, image=map_file)
                 
                 # Log the creation safely inside your central Approved Campaign Actions column
                 PlayerPost.objects.create(
@@ -65,20 +65,19 @@ def campaign_dashboard(request):
             if not request.user.is_superuser:
                 return redirect('dashboard')
                 
-            # Gracefully handle either form variable identifier
             bg_id = request.POST.get('active_map') or request.POST.get('active_map_id')
             if bg_id:
                 try:
                     selected_bg = BackgroundAsset.objects.get(id=bg_id)
                     
-                    # Create an approved record with no token to notify the room and update canvas panel
+                    # Target .title here as well to fix the crash on line 77!
                     PlayerPost.objects.create(
                         player=request.user,
-                        message=f"updated active battlefield scene to: '{selected_bg.name}'",
+                        message=f"updated active battlefield scene to: '{selected_bg.title}'",
                         selected_background=selected_bg,
                         status='APPROVED'
                     )
-                    messages.success(request, f"Tabletop canvas transitioned to {selected_bg.name}!")
+                    messages.success(request, f"Tabletop canvas transitioned to {selected_bg.title}!")
                 except BackgroundAsset.DoesNotExist:
                     pass
             return redirect('dashboard')
@@ -147,6 +146,7 @@ def delete_background_asset(request, asset_id):
     asset.delete()
     messages.success(request, f"Successfully purged map scene: '{name}'")
     return redirect('dashboard')
+
 
 
 @login_required

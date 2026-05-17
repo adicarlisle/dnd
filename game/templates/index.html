@@ -162,13 +162,13 @@
             <form method="POST" action="{% url 'dashboard' %}">
                 {% csrf_token %}
                 <select name="active_map_id" onchange="this.form.submit()" class="input-style">
-                    <option value="">-- Choose Battlefield Scene --</option>
-                    {% for asset in backgrounds %}
-                        <option value="{{ asset.id }}" {% if active_background and active_background.id == asset.id %}selected{% endif %}>
-                            {{ asset.name }}
-                        </option>
-                    {% endfor %}
-                </select>
+    <option value="">-- Choose Battlefield Scene --</option>
+    {% for asset in backgrounds %}
+        <option value="{{ asset.id }}" {% if active_background and active_background.id == asset.id %}selected{% endif %}>
+            {{ asset.title }}
+        </option>
+    {% endfor %}
+</select>
             </form>
             <button onclick="toggleUploadModal(true)" class="btn btn-outline" style="margin-top: 5px;">
                 ➕ Upload New Map Asset
