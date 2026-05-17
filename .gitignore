@@ -1,5 +1,7 @@
-/venv
+# Securely ignore these in your .gitignore file:
+venv/
+__pycache__/
+*.pyc
 .env
-__pycache__
-/__pycache__
-.pyc
+db.sqlite3  (if you ever use local testing files)
+media/      (so your local test maps don't clutter your GitHub repository)
