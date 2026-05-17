@@ -159,3 +159,6 @@ AWS_DEFAULT_ACL = None
 
 # Automatically builds the public URL paths rendered in your index.html canvas
 MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
+
+# Accept local connections and any subdomain assigned by Vercel
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.vercel.app']
