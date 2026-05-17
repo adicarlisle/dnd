@@ -44,7 +44,8 @@ class BackgroundAsset(models.Model):
 class PlayerPost(models.Model):
     player = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
-    character_token = models.ImageField(upload_module='tokens/', null=True, blank=True) # or FileField
+    # Keep FileField if you want videos/animated clips, or use ImageField for static images only
+    character_token = models.FileField(upload_to='tokens/', null=True, blank=True)
     selected_background = models.ForeignKey('BackgroundAsset', on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=10, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
