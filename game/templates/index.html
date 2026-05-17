@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Campaign Canvas Hub</title>
+    <style>
+        /* ==============================================================================
+   📱 MOBILE RESPONSIVE ADAPTATION (For Player Sub-Accounts)
+   ============================================================================== */
+@media (max-width: 768px) {
+    /* 1. Change layout wrap from horizontal split rows to a vertical stack */
+    body, .main-container {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        height: auto;
+    }
+
+    /* 2. Push the Game Canvas map to the very top of the phone screen */
+    .canvas-area {
+        width: 100% !important;
+        height: 50vh; /* Takes up exactly half the mobile view height */
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        border-bottom: 2px solid #3b3b4f;
+    }
+
+    /* 3. Scale map images and videos inside the mobile window frame */
+    .map-bg {
+        width: 100%;
+        height: 100%;
+        object-fit: contain; /* Keeps aspect ratios safe so maps don't stretch uglily */
+        background: #0d0d11;
+    }
+
+    /* 4. Let tokens adjust dynamically so they scale down nicely on touch screens */
+    .token-layer {
+        width: 40px !important;
+        height: 40px !important;
+    }
+
+    /* 5. Drop the Player actions/forms right below the map canvas */
+    .sidebar-navigation, .control-panel {
+        width: 100% !important;
+        padding: 15px;
+        box-sizing: border-box;
+    }
+
+    /* 6. Hide the DM account creator completely on mobile */
+    /* This prevents clutter, since the DM should be administrating on desktop! */
+    .dm-control-card {
+        display: none !important;
+    }
+
+    /* 7. Make form elements large enough to click easily with thumbs */
+    input, select, textarea, button {
+        font-size: 16px !important; /* Prevents iOS from forcing annoying automatic zooming */
+        padding: 12px !important;
+    }
+}
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            height: 95vh;
+        }
+
+        /* Left Side: Dynamic Workspace Control View */
+        .sidebar {
+            width: 350px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        h2, h3 { color: #ffb300; margin-top: 0; }
+        
+        .nav-links a {
+            color: #ffb300;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        label { font-size: 0.85rem; color: #b0b0b0; }
+        input[type="text"], textarea, select {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        button {
+            background: #ffb300;
+            color: #121212;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background: #ffa000; }
+
+        /* Right Side: Visual Sandbox / Active Map Layer Overlay */
+        .canvas-area {
+            flex-grow: 1;
+            background: #181818;
+            border: 1px solid #333;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .map-bg {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            z-index: 1;
+        }
+
+        /* Floating character tokens over backgrounds */
+        .token-layer {
+            position: absolute;
+            z-index: 5;
+            width: 80px;
+            height: 80px;
+            border: 3px solid #ffb300;
+            border-radius: 50%;
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.7);
+        }
+
+        .message-log {
+            flex-grow: 1;
+            overflow-y: auto;
+            background: #151515;
+            border-radius: 4px;
+            padding: 10px;
+            border: 1px solid #2a2a2a;
+        }
+
+        .msg-card {
+            background: #222;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border-left: 3px solid #ffb300;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar-navigation">
+    
+    <a href="{% url 'dm_review_panel' %}">Review Queue</a>
+
+    {% if user.is_superuser and user_form %}
+        <div class="dm-control-card" style="background: #1a1a24; padding: 15px; border-radius: 8px; margin-top: 20px; border: 1px solid #3b3b4f;">
+            <h3 style="color: #ffaa00; margin-top: 0; font-size: 1.1rem; margin-bottom: 12px;">🧙‍♂️ Register Sub-User</h3>
+            
+            <form method="POST" autocomplete="off">
+                {% csrf_token %}
+                
+                {% for field in user_form %}
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 4px;">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}
+                            <small style="color: #ff8888; display: block; margin-top: 4px;">{{ field.errors.0 }}</small>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                
+                <button type="submit" name="create_player_account" style="width: 100%; background: #ffaa00; color: #111; font-weight: bold; padding: 8px; border: none; border-radius: 4px; cursor: pointer;">
+                    Create Player Account
+                </button>
+            </form>
+        </div>
+    {% endif %}
+
+</div>
+
+        <hr style="border-color: #333; margin: 5px 0;">
+
+        {% if user.is_superuser %}
+        <div style="background: #2a1e1e; border: 1px solid #ffb300; padding: 15px; border-radius: 6px;">
+            <h3 style="color: #ffb300; margin-bottom: 10px;">👑 DM Map Controls</h3>
+            
+            <form method="POST" style="margin-bottom: 15px;">
+                {% csrf_token %}
+                <input type="hidden" name="dm_map_control" value="1">
+                <div class="form-group">
+                    <label>Set Active Battlefield Map:</label>
+                    <select name="active_map" onchange="this.form.submit()">
+                        {% for bg in backgrounds %}
+                            <option value="{{ bg.id }}" {% if bg == active_background %}selected{% endif %}>{{ bg.title }}</option>
+                        {% empty %}
+                            <option>No maps uploaded yet...</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+
+            <a href="/admin/game/backgroundasset/add/" target="_blank" style="display: block; text-align: center; background: #3a2e2e; color: #ffb300; border: 1px solid #ffb300; padding: 8px; border-radius: 4px; text-decoration: none; font-size: 0.85rem; font-weight: bold;">
+                ➕ Upload New Map Asset
+            </a>
+        </div>
+        {% endif %}
+
+        <div>
+            <h3>Submit Token Action</h3>
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Action/Movement Message</label>
+                    <textarea name="message" rows="3" placeholder="Ex: Moving my rogue 30ft behind the pillar..." required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Character Token Image</label>
+                    <input type="file" name="token_image" accept="image/*">
+                </div>
+
+                <button type="submit" style="width: 100%;">Send to DM Queue</button>
+            </form>
+        </div>
+
+        <h3>Approved Campaign Actions</h3>
+        <div class="message-log">
+            {% for post in live_feed %}
+                <div class="msg-card">
+                    <strong>{{ post.player.username }}:</strong> {{ post.message }}
+                </div>
+            {% empty %}
+                <p style="font-size: 0.85rem; color: #666;">No active positions merged yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="canvas-area">
+    {% if active_background %}
+        {% if ".mp4" in active_background.image.url or ".webm" in active_background.image.url or ".mov" in active_background.image.url %}
+            <video class="map-bg" src="{{ active_background.image.url }}" autoplay loop muted playsinline></video>
+        {% else %}
+            <img class="map-bg" src="{{ active_background.image.url }}" alt="Campaign Canvas Map">
+        {% endif %}
+    {% else %}
+        <p style="color: #444; font-weight: bold;">No active canvas map selected. Use the DM controls to project a map layout!</p>
+    {% endif %}
+
+    {% for post in live_feed %}
+        {% if post.character_token %}
+            {% if ".mp4" in post.character_token.url or ".webm" in post.character_token.url or ".mov" in post.character_token.url %}
+                <video class="token-layer" 
+                       data-index="{{ forloop.counter0 }}"
+                       style="margin-top: calc({{ forloop.counter0 }} * 50px); margin-left: calc({{ forloop.counter0 }} * 60px); object-fit: cover;"
+                       src="{{ post.character_token.url }}" autoplay loop muted playsinline title="{{ post.player.username }}: {{ post.message }}"></video>
+            {% else %}
+                <div class="token-layer" 
+                     data-index="{{ forloop.counter0 }}"
+                     style="background-image: url('{{ post.character_token.url }}'); margin-top: calc({{ forloop.counter0 }} * 50px); margin-left: calc({{ forloop.counter0 }} * 60px);"
+                     title="{{ post.player.username }}: {{ post.message }}">
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+</div>
+
+</body>
+</html>

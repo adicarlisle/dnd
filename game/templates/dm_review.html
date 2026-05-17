@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DM Approval Vault</title>
+    <style>
+        body { background-color: #121212; color: #e0e0e0; font-family: sans-serif; padding: 20px; }
+        .panel { max-width: 800px; margin: 0 auto; }
+        h1 { color: #ffb300; }
+        .request-card { background: #1e1e1e; border: 1px solid #333; padding: 20px; border-radius: 6px; margin-bottom: 15px; }
+        .preview-box { display: flex; gap: 20px; margin-top: 15px; }
+        .preview-img { max-width: 150px; border-radius: 4px; border: 1px solid #555; }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-approve { background: #4caf50; color: white; }
+        .btn-reject { background: #f44336; color: white; margin-left: 10px; }
+    </style>
+</head>
+<body>
+<div class="panel">
+    <h1>DM Master Control Hub</h1>
+    <a href="{% url 'dashboard' %}" style="color: #ffb300;">← Back to Main Screen</a>
+    <hr style="border-color: #333; margin: 20px 0;">
+
+    {% if not pending_submissions %}
+        <p>No pending character placement requests at this time.</p>
+    {% endif %}
+
+    {% for post in pending_submissions %}
+        <div class="request-card">
+            <h3>Player Request from: {{ post.player.username }}</h3>
+            <p><strong>Message/Action Description:</strong> {{ post.message }}</p>
+            
+            <div class="preview-box">
+                {% if post.character_token %}
+                    <div>
+                        <p style="font-size: 0.8rem; color: #aaa;">Character Asset:</p>
+                        <img class="preview-img" src="{{ post.character_token.url }}">
+                    </div>
+                {% endif %}
+                
+                {% if post.selected_background %}
+                    <div>
+                        <p style="font-size: 0.8rem; color: #aaa;">Target Background Layer:</p>
+                        <img class="preview-img" src="{{ post.selected_background.image.url }}">
+                    </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-top: 20px;">
+                <a href="{% url 'approve_merge' post.id 'approve' %}" class="btn btn-approve">Approve & Merge Asset</a>
+                <a href="{% url 'approve_merge' post.id 'reject' %}" class="btn btn-reject">Reject Request</a>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+</body>
+</html>
