@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.contrib.auth.forms import UserCreationForm # 🧙‍♂️ Added for administrative registration
+from django.contrib.auth.forms import UserCreationForm
 from .models import BackgroundAsset, PlayerPost
 
 @login_required
@@ -20,7 +20,7 @@ def campaign_dashboard(request):
     if not active_background and backgrounds.exists():
         active_background = backgrounds.first()
 
-    # 🛠️ Initialize an empty registration form shell context if the user is a DM
+    # Initialize an empty registration form shell context if the user is a DM
     user_form = UserCreationForm() if request.user.is_superuser else None
 
     # 3. Process Actions when a form is submitted
@@ -38,30 +38,55 @@ def campaign_dashboard(request):
                 return redirect('dashboard')
             else:
                 messages.error(request, "Failed to create player account. Please fix the form formatting constraints.")
-                # We do not redirect on a validation fail so the field errors render in place!
 
-        # 👑 SUBMISSION A: DM Map Control Update Event
-        elif "dm_map_control" in request.POST:
+        # 🎨 SUBMISSION A-ALT: DM New Map Asset Upload Modal Form
+        elif request.POST.get('action_type') == 'upload_asset':
             if not request.user.is_superuser:
                 return redirect('dashboard')
                 
-            bg_id = request.POST.get('active_map')
-            if bg_id:
-                selected_bg = BackgroundAsset.objects.get(id=bg_id)
-                # Save a system master declaration track straight to the database
+            map_name = request.POST.get('map_name')
+            map_file = request.FILES.get('map_file')
+            
+            if map_name and map_file:
+                # Save new file directly into Supabase via django-storages
+                new_asset = BackgroundAsset.objects.create(name=map_name, image=map_file)
+                
+                # Log the creation safely inside your central Approved Campaign Actions column
                 PlayerPost.objects.create(
                     player=request.user,
-                    message=f"DM updated active battlefield scene to: {selected_bg.title}",
-                    selected_background=selected_bg,
+                    message=f"added a new map layout option: '{map_name}' to the DM storage vault.",
                     status='APPROVED'
                 )
-                messages.success(request, f"Tabletop canvas transitioned to {selected_bg.title}!")
+                messages.success(request, f"Successfully uploaded '{map_name}' to the campaign vault!")
+            return redirect('dashboard')
+
+        # 👑 SUBMISSION A: DM Map Control Update Event (From Dropdown Select)
+        elif "dm_map_control" in request.POST or "active_map_id" in request.POST:
+            if not request.user.is_superuser:
+                return redirect('dashboard')
+                
+            # Gracefully handle either form variable identifier
+            bg_id = request.POST.get('active_map') or request.POST.get('active_map_id')
+            if bg_id:
+                try:
+                    selected_bg = BackgroundAsset.objects.get(id=bg_id)
+                    
+                    # Create an approved record with no token to notify the room and update canvas panel
+                    PlayerPost.objects.create(
+                        player=request.user,
+                        message=f"updated active battlefield scene to: '{selected_bg.name}'",
+                        selected_background=selected_bg,
+                        status='APPROVED'
+                    )
+                    messages.success(request, f"Tabletop canvas transitioned to {selected_bg.name}!")
+                except BackgroundAsset.DoesNotExist:
+                    pass
             return redirect('dashboard')
 
         # 🧝 SUBMISSION B: Normal Player Character Token/Action Post
         else:
             message_text = request.POST.get('message')
-            uploaded_token = request.FILES.get('token_image') # Handled cleanly via FileField now!
+            uploaded_token = request.FILES.get('token_image') or request.FILES.get('map_file')
             
             # Send standard player inputs right down the path to your DM review vault
             PlayerPost.objects.create(
@@ -78,7 +103,7 @@ def campaign_dashboard(request):
         'live_feed': live_feed,
         'backgrounds': backgrounds,
         'active_background': active_background,
-        'user_form': user_form, # Injected back to layout template canvas context
+        'user_form': user_form,
     }
     return render(request, 'index.html', context)
 
@@ -86,7 +111,6 @@ def campaign_dashboard(request):
 # 👑 THE DM REVIEW ENDPOINTS
 @login_required
 def dm_review_panel(request):
-    # Kick anyone out who tries to type this URL manually without admin clearance
     if not request.user.is_superuser:
         return redirect('dashboard')
         
@@ -111,20 +135,17 @@ def approve_merge_action(request, post_id, decision):
         
     return redirect('dm_review_panel')
 
+
 @login_required
 def delete_background_asset(request, asset_id):
-    # Security checkpoint: Only the DM can delete files
     if not request.user.is_superuser:
         return redirect('dashboard')
         
     asset = get_object_or_404(BackgroundAsset, id=asset_id)
-    title = asset.title
+    name = asset.name
     
-    # This automatically removes the record from your DB 
-    # (And django-storages will handle letting Supabase know to clear the file!)
     asset.delete()
-    
-    messages.success(request, f"Successfully purged map scene: '{title}'")
+    messages.success(request, f"Successfully purged map scene: '{name}'")
     return redirect('dashboard')
 
 
@@ -134,9 +155,8 @@ def delete_player_post(request, post_id):
         return redirect('dashboard')
         
     post = get_object_or_404(PlayerPost, id=post_id)
-    player_name = post.player.username
+    player_name = post.display_name # Uses your polished QoL display property!
     
     post.delete()
-    
     messages.success(request, f"Removed action layer submitted by {player_name}.")
     return redirect('dashboard')
