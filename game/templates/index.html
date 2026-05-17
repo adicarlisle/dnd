@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
     <title>VTT Campaign Workspace</title>
     <style>
         /* Base Reset & Scrollbars */
@@ -214,25 +215,33 @@
     </div>
 
     <div class="feed-panel">
-        <div class="feed-header">
-            <h3 style="color: #ffaa00; margin: 0; font-size: 1.2rem; letter-spacing: 0.5px;">Approved Campaign Actions</h3>
-        </div>
-        <div class="feed-scroll">
-            {% for post in live_feed %}
-                <div class="feed-item">
-                    <div>
-                        <strong style="color: #ffaa00;">🎭 {{ post.display_name }}:</strong>
-                        <span style="color: #eee;">{{ post.message }}</span>
-                    </div>
-                    {% if user.is_superuser %}
-                        <a href="{% url 'delete_player_post' post.id %}" onclick="return confirm('Remove this action from history?');" style="position: absolute; right: 10px; top: 10px; color: #ff5555; text-decoration: none; font-size: 0.75rem; background: rgba(255,85,85,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,85,85,0.2);">Clear</a>
-                    {% endif %}
-                </div>
-            {% empty %}
-                <p style="color: #444; text-align: center; margin-top: 40px; font-style: italic;">No session history logged yet.</p>
-            {% endfor %}
-        </div>
+    <div class="feed-header">
+        <h3 style="color: #ffaa00; margin: 0; font-size: 1.2rem; letter-spacing: 0.5px;">Approved Campaign Actions</h3>
     </div>
+    
+    <div class="feed-scroll" 
+         id="action-log-container"
+         hx-get="{% url 'dashboard' %}" 
+         hx-trigger="every 4s visibility" 
+         hx-select="#action-log-container" 
+         hx-target="#action-log-container"
+         hx-swap="innerHTML">
+         
+        {% for post in live_feed %}
+            <div class="feed-item">
+                <div>
+                    <strong style="color: #ffaa00;">🎭 {{ post.display_name }}:</strong>
+                    <span style="color: #eee;">{{ post.message }}</span>
+                </div>
+                {% if user.is_superuser %}
+                    <a href="{% url 'delete_player_post' post.id %}" onclick="return confirm('Remove this action from history?');" style="position: absolute; right: 10px; top: 10px; color: #ff5555; text-decoration: none; font-size: 0.75rem; background: rgba(255,85,85,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,85,85,0.2);">Clear</a>
+                {% endif %}
+            </div>
+        {% empty %}
+            <p style="color: #444; text-align: center; margin-top: 40px; font-style: italic;">No session history logged yet.</p>
+        {% endfor %}
+    </div>
+</div>
 
     <div class="canvas-panel">
         {% if active_background %}
