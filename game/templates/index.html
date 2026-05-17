@@ -275,21 +275,21 @@
     {% endif %}
 
     {% for post in live_feed %}
-        {% if post.character_token %}
-            {% if ".mp4" in post.character_token.url or ".webm" in post.character_token.url or ".mov" in post.character_token.url %}
-                <video class="token-layer" 
-                       data-index="{{ forloop.counter0 }}"
-                       style="margin-top: calc({{ forloop.counter0 }} * 50px); margin-left: calc({{ forloop.counter0 }} * 60px); object-fit: cover;"
-                       src="{{ post.character_token.url }}" autoplay loop muted playsinline title="{{ post.player.username }}: {{ post.message }}"></video>
-            {% else %}
-                <div class="token-layer" 
-                     data-index="{{ forloop.counter0 }}"
-                     style="background-image: url('{{ post.character_token.url }}'); margin-top: calc({{ forloop.counter0 }} * 50px); margin-left: calc({{ forloop.counter0 }} * 60px);"
-                     title="{{ post.player.username }}: {{ post.message }}">
-                </div>
-            {% endif %}
+    <div class="feed-item" style="padding: 10px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <strong style="color: #ffaa00;">🎭 {{ post.display_name }}:</strong>
+            <span style="color: #eee;">{{ post.message }}</span>
+        </div>
+        
+        {% if user.is_superuser %}
+            <a href="{% url 'delete_player_post' post.id %}" 
+               onclick="return confirm('Remove this token layer from the live board?');"
+               style="color: #ff5555; font-size: 0.75rem; text-decoration: none; margin-left: 10px; background: rgba(255,85,85,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,85,85,0.3);">
+               🗑️ Clear
+            </a>
         {% endif %}
-    {% endfor %}
+    </div>
+{% endfor %}
 </div>
 
 </body>

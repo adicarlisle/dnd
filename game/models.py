@@ -42,19 +42,23 @@ class BackgroundAsset(models.Model):
 
 
 class PlayerPost(models.Model):
-    STATUS_CHOICES = [
-        ('PENDING', 'Pending DM Review'),
-        ('APPROVED', 'Merged into Dashboard'),
-        ('REJECTED', 'Rejected'),
-    ]
-    
     player = models.ForeignKey(User, on_delete=models.CASCADE)
     message = models.TextField()
-    # Changed to FileField to allow video/animated clips seamlessly
-    character_token = models.FileField(upload_to='player_tokens/', blank=True, null=True, validators=[validate_token_media])
-    selected_background = models.ForeignKey(BackgroundAsset, on_delete=models.SET_NULL, null=True, blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    character_token = models.ImageField(upload_module='tokens/', null=True, blank=True) # or FileField
+    selected_background = models.ForeignKey('BackgroundAsset', on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=10, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # 🎭 THE NEW QOL PROPERTY OVERRIDE
+    @property
+    def display_name(self):
+        """
+        Looks at the User account. If the DM has filled out the 'First Name' 
+        field with a Character Name, it returns that. Otherwise, defaults to the account username.
+        """
+        if self.player.first_name:
+            return self.player.first_name
+        return self.player.username
+
     def __str__(self):
-        return f"{self.player.username} - {self.status}"
+        return f"{self.display_name} - {self.message[:20]}"
