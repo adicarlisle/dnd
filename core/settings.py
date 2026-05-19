@@ -64,6 +64,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'game.context_processors.supabase_config',
             ],
         },
     },
@@ -162,3 +163,15 @@ MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
 
 # Accept local connections and any subdomain assigned by Vercel
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.vercel.app']
+
+# ==============================================================================
+# SUPABASE REALTIME CONFIGURATION (Optional - for live updates)
+# ==============================================================================
+# Add these to your .env file to enable real-time features:
+# SUPABASE_URL=your_supabase_project_url
+# SUPABASE_ANON_KEY=your_supabase_anon_key
+# 
+# Without these, the app will use polling fallback (updates every 3 seconds)
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')

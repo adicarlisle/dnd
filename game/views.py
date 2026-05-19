@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.forms import UserCreationForm
+from django.http import JsonResponse
 from .models import BackgroundAsset, PlayerPost
 
 @login_required
@@ -141,7 +142,7 @@ def delete_background_asset(request, asset_id):
         return redirect('dashboard')
         
     asset = get_object_or_404(BackgroundAsset, id=asset_id)
-    name = asset.name
+    name = asset.title
     
     asset.delete()
     messages.success(request, f"Successfully purged map scene: '{name}'")
@@ -160,3 +161,64 @@ def delete_player_post(request, post_id):
     post.delete()
     messages.success(request, f"Removed action layer submitted by {player_name}.")
     return redirect('dashboard')
+
+
+# 🔴 REAL-TIME API ENDPOINTS FOR SUPABASE INTEGRATION
+@login_required
+def api_live_feed(request):
+    """API endpoint to fetch approved actions for live feed"""
+    live_feed = PlayerPost.objects.filter(status='APPROVED').order_by('-created_at')[:50]
+    
+    data = [{
+        'id': post.id,
+        'display_name': post.display_name,
+        'message': post.message,
+        'created_at': post.created_at.isoformat(),
+        'character_token': post.character_token.url if post.character_token else None,
+    } for post in live_feed]
+    
+    return JsonResponse({'feed': data})
+
+
+@login_required
+def api_pending_queue(request):
+    """API endpoint to fetch pending DM review submissions"""
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    
+    pending = PlayerPost.objects.filter(status='PENDING').order_by('created_at')
+    
+    data = [{
+        'id': post.id,
+        'display_name': post.display_name,
+        'message': post.message,
+        'created_at': post.created_at.isoformat(),
+        'character_token': post.character_token.url if post.character_token else None,
+    } for post in pending]
+    
+    return JsonResponse({'queue': data, 'count': len(data)})
+
+
+@login_required
+def api_active_map(request):
+    """API endpoint to get current active map"""
+    active_background = BackgroundAsset.objects.filter(
+        playerpost__status='APPROVED', 
+        playerpost__character_token__isnull=True
+    ).last()
+    
+    if not active_background:
+        backgrounds = BackgroundAsset.objects.all()
+        if backgrounds.exists():
+            active_background = backgrounds.first()
+    
+    if active_background:
+        data = {
+            'id': active_background.id,
+            'title': active_background.title,
+            'image_url': active_background.image.url,
+        }
+    else:
+        data = None
+    
+    return JsonResponse({'active_map': data})

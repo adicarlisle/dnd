@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    <title>VTT Campaign Workspace</title>
+    <title>VTT Campaign Dashboard - Live</title>
+    
+    <!-- Supabase Client for Real-time Updates -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         /* Base Reset & Scrollbars */
         body, html {
@@ -50,6 +53,7 @@
             padding: 15px;
             background: #161622;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            position: relative;
         }
         .panel-title {
             color: #ffaa00;
@@ -57,6 +61,31 @@
             font-size: 1.1rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        /* Connection Status Indicator */
+        .connection-status {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            transition: all 0.3s;
+        }
+        .connection-status.connected {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+        .connection-status.connecting {
+            background: #ffaa00;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
         /* Central Campaign Log Feed */
@@ -73,6 +102,9 @@
             padding: 20px;
             border-bottom: 1px solid #222;
             background: #111116;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .feed-scroll {
             flex: 1;
@@ -89,6 +121,23 @@
             border-radius: 6px;
             position: relative;
             line-height: 1.4;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .feed-item.new {
+            border-color: #ffaa00;
+            background: rgba(255, 170, 0, 0.1);
         }
 
         /* Right Canvas Viewport */
@@ -109,6 +158,7 @@
             max-width: 100%;
             max-height: 90vh;
             display: block;
+            transition: opacity 0.5s;
         }
 
         /* Form UI Styling */
@@ -140,6 +190,57 @@
         .btn-outline { background: rgba(255, 170, 0, 0.05); color: #ffaa00; border: 1px solid #ffaa00; }
         .btn-outline:hover { background: rgba(255, 170, 0, 0.15); }
 
+        /* Badge Counter */
+        .badge {
+            display: inline-block;
+            background: #ff4444;
+            color: white;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 8px;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        /* Toast Notification System */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background: #1a1a24;
+            border: 2px solid #ffaa00;
+            border-radius: 8px;
+            padding: 15px 20px;
+            min-width: 300px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            animation: toastSlideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .toast.success { border-color: #00ff88; }
+        .toast.info { border-color: #00b3ff; }
+        .toast.map-change { border-color: #ff00ff; }
+
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
         /* Modal Overlay */
         .modal-overlay {
             display: none;
@@ -150,34 +251,58 @@
             justify-content: center;
             align-items: center;
         }
+
+        /* Live Indicator */
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #00ff88;
+            font-size: 0.85rem;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 <body>
+
+<div class="toast-container" id="toastContainer"></div>
 
 <div class="workspace-root">
 
     <div class="sidebar">
         
+        {% if user.is_superuser %}
         <div class="panel-box">
+            <div class="connection-status" id="connectionStatus"></div>
             <h3 class="panel-title">👑 DM Map Controls</h3>
-            <form method="POST" action="{% url 'dashboard' %}">
+            <form method="POST" action="{% url 'dashboard' %}" id="mapChangeForm">
                 {% csrf_token %}
-                <select name="active_map_id" onchange="this.form.submit()" class="input-style">
-    <option value="">-- Choose Battlefield Scene --</option>
-    {% for asset in backgrounds %}
-        <option value="{{ asset.id }}" {% if active_background and active_background.id == asset.id %}selected{% endif %}>
-            {{ asset.title }}
-        </option>
-    {% endfor %}
-</select>
+                <select name="active_map_id" id="mapSelector" onchange="handleMapChange()" class="input-style">
+                    <option value="">-- Choose Battlefield Scene --</option>
+                    {% for asset in backgrounds %}
+                        <option value="{{ asset.id }}" 
+                                data-image-url="{{ asset.image.url }}" 
+                                data-title="{{ asset.title }}"
+                                {% if active_background and active_background.id == asset.id %}selected{% endif %}>
+                            {{ asset.title }}
+                        </option>
+                    {% endfor %}
+                </select>
             </form>
             <button onclick="toggleUploadModal(true)" class="btn btn-outline" style="margin-top: 5px;">
                 ➕ Upload New Map Asset
             </button>
-            <a href="{% url 'dm_review_panel' %}" class="btn btn-outline" style="display: block; text-align: center; text-decoration: none; box-sizing: border-box; margin-top: 10px; background: rgba(0,150,255,0.05); color: #00b3ff; border-color: #00b3ff;">
-                🛡️ Open Review Queue
+            <a href="{% url 'dm_review_panel' %}" class="btn btn-outline" id="reviewQueueBtn" style="display: block; text-align: center; text-decoration: none; box-sizing: border-box; margin-top: 10px; background: rgba(0,150,255,0.05); color: #00b3ff; border-color: #00b3ff;">
+                🛡️ Open Review Queue <span class="badge" id="queueBadge" style="display: none;">0</span>
             </a>
         </div>
+        {% endif %}
 
         <div class="panel-box">
             <h3 class="panel-title">⚔️ Submit Token Action</h3>
@@ -215,39 +340,36 @@
     </div>
 
     <div class="feed-panel">
-    <div class="feed-header">
-        <h3 style="color: #ffaa00; margin: 0; font-size: 1.2rem; letter-spacing: 0.5px;">Approved Campaign Actions</h3>
-    </div>
-    
-    <div class="feed-scroll" 
-         id="action-log-container"
-         hx-get="{% url 'dashboard' %}" 
-         hx-trigger="every 4s visibility" 
-         hx-select="#action-log-container" 
-         hx-target="#action-log-container"
-         hx-swap="innerHTML">
-         
-        {% for post in live_feed %}
-            <div class="feed-item">
-                <div>
-                    <strong style="color: #ffaa00;">🎭 {{ post.display_name }}:</strong>
-                    <span style="color: #eee;">{{ post.message }}</span>
-                </div>
-                {% if user.is_superuser %}
-                    <a href="{% url 'delete_player_post' post.id %}" onclick="return confirm('Remove this action from history?');" style="position: absolute; right: 10px; top: 10px; color: #ff5555; text-decoration: none; font-size: 0.75rem; background: rgba(255,85,85,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,85,85,0.2);">Clear</a>
-                {% endif %}
+        <div class="feed-header">
+            <h3 style="color: #ffaa00; margin: 0; font-size: 1.2rem; letter-spacing: 0.5px;">Approved Campaign Actions</h3>
+            <div class="live-indicator">
+                <span class="live-dot"></span>
+                <span>LIVE</span>
             </div>
-        {% empty %}
-            <p style="color: #444; text-align: center; margin-top: 40px; font-style: italic;">No session history logged yet.</p>
-        {% endfor %}
+        </div>
+        
+        <div class="feed-scroll" id="actionFeed">
+            {% for post in live_feed %}
+                <div class="feed-item" data-post-id="{{ post.id }}">
+                    <div>
+                        <strong style="color: #ffaa00;">🎭 {{ post.display_name }}:</strong>
+                        <span style="color: #eee;">{{ post.message }}</span>
+                    </div>
+                    {% if user.is_superuser %}
+                        <a href="{% url 'delete_player_post' post.id %}" onclick="return confirm('Remove this action from history?');" style="position: absolute; right: 10px; top: 10px; color: #ff5555; text-decoration: none; font-size: 0.75rem; background: rgba(255,85,85,0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,85,85,0.2);">Clear</a>
+                    {% endif %}
+                </div>
+            {% empty %}
+                <p style="color: #444; text-align: center; margin-top: 40px; font-style: italic;">No session history logged yet.</p>
+            {% endfor %}
+        </div>
     </div>
-</div>
 
     <div class="canvas-panel">
         {% if active_background %}
-            <img class="map-frame" src="{{ active_background.image.url }}" alt="Active Map Canvas">
+            <img class="map-frame" id="activeMap" src="{{ active_background.image.url }}" alt="Active Map Canvas" data-map-id="{{ active_background.id }}">
         {% else %}
-            <div style="text-align: center; color: #333;">
+            <div style="text-align: center; color: #333;" id="noMapPlaceholder">
                 <p style="font-size: 4.5rem; margin: 0 0 10px 0;">🗺️</p>
                 <p style="font-size: 1rem; letter-spacing: 0.5px;">No map active. Select an item from the DM controls dropdown list.</p>
             </div>
@@ -256,6 +378,7 @@
 
 </div>
 
+{% if user.is_superuser %}
 <div id="uploadModal" class="modal-overlay">
     <div style="background: #161622; border: 2px solid #ffaa00; border-radius: 8px; width: 400px; padding: 25px; box-shadow: 0 0 30px rgba(0,0,0,0.7); position: relative;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #2d2d3a; padding-bottom: 10px;">
@@ -274,7 +397,7 @@
             
             <div style="margin-bottom: 25px;">
                 <label style="color: #ccc; display: block; margin-bottom: 5px; font-size: 0.9rem;">S3 File Asset Location:</label>
-                <input type="file" name="map_file" required accept="image/*" style="color: #ccc; font-size: 0.85rem;">
+                <input type="file" name="map_file" required accept="image/*,video/*" style="color: #ccc; font-size: 0.85rem;">
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -284,11 +407,376 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 <script>
+// ============================================================================
+// SUPABASE REALTIME CONFIGURATION
+// ============================================================================
+
+// Get CSRF token for API calls
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// Supabase configuration - YOU NEED TO ADD YOUR CREDENTIALS
+const SUPABASE_URL = '{{ SUPABASE_URL|default:"YOUR_SUPABASE_URL" }}';
+const SUPABASE_ANON_KEY = '{{ SUPABASE_ANON_KEY|default:"YOUR_SUPABASE_ANON_KEY" }}';
+
+let supabase = null;
+let connectionStatus = 'disconnected';
+
+// Initialize Supabase if credentials are provided
+if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    initializeRealtime();
+} else {
+    console.warn('⚠️ Supabase credentials not configured. Using polling fallback.');
+    startPollingFallback();
+}
+
+// ============================================================================
+// REALTIME SUBSCRIPTION MANAGEMENT
+// ============================================================================
+
+function initializeRealtime() {
+    updateConnectionStatus('connecting');
+    
+    // Subscribe to PlayerPost changes
+    const channel = supabase
+        .channel('db-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'game_playerpost'
+            },
+            handleDatabaseChange
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                updateConnectionStatus('connected');
+                showToast('🔴 Live updates active!', 'success');
+            } else if (status === 'CHANNEL_ERROR') {
+                updateConnectionStatus('disconnected');
+                console.error('Subscription error, falling back to polling');
+                startPollingFallback();
+            }
+        });
+}
+
+function handleDatabaseChange(payload) {
+    console.log('Database change detected:', payload);
+    
+    const { eventType, new: newRecord, old: oldRecord } = payload;
+    
+    // Handle different event types
+    if (eventType === 'INSERT') {
+        if (newRecord.status === 'PENDING') {
+            handleNewPendingSubmission(newRecord);
+        } else if (newRecord.status === 'APPROVED') {
+            handleNewApprovedAction(newRecord);
+        }
+    } else if (eventType === 'UPDATE') {
+        if (oldRecord.status === 'PENDING' && newRecord.status === 'APPROVED') {
+            handleActionApproved(newRecord);
+        }
+        // Check for map changes
+        if (newRecord.selected_background_id && !newRecord.character_token) {
+            handleMapChange(newRecord);
+        }
+    }
+}
+
+// ============================================================================
+// EVENT HANDLERS
+// ============================================================================
+
+function handleNewPendingSubmission(record) {
+    // Update DM queue counter
+    {% if user.is_superuser %}
+    updateQueueCounter();
+    showToast(`📬 New action from ${record.player__first_name || 'Player'}`, 'info');
+    playNotificationSound();
+    {% endif %}
+}
+
+function handleNewApprovedAction(record) {
+    // Refresh the live feed
+    refreshLiveFeed();
+    showToast(`✨ New action approved!`, 'success');
+}
+
+function handleActionApproved(record) {
+    refreshLiveFeed();
+    {% if not user.is_superuser %}
+    showToast(`✅ Your action was approved!`, 'success');
+    {% endif %}
+}
+
+function handleMapChange(record) {
+    // Update the active map
+    refreshActiveMap();
+    showToast(`🗺️ Map changed to new scene!`, 'map-change');
+}
+
+// ============================================================================
+// UI UPDATE FUNCTIONS
+// ============================================================================
+
+async function refreshLiveFeed() {
+    try {
+        const response = await fetch('/api/live-feed/', {
+            headers: {
+                'X-CSRFToken': csrftoken,
+            }
+        });
+        const data = await response.json();
+        
+        const feedContainer = document.getElementById('actionFeed');
+        const existingIds = new Set(
+            [...feedContainer.querySelectorAll('.feed-item')].map(el => el.dataset.postId)
+        );
+        
+        // Add new items at the top
+        data.feed.forEach(post => {
+            if (!existingIds.has(String(post.id))) {
+                const feedItem = createFeedItem(post, true);
+                feedContainer.insertBefore(feedItem, feedContainer.firstChild);
+            }
+        });
+    } catch (error) {
+        console.error('Error refreshing feed:', error);
+    }
+}
+
+async function refreshActiveMap() {
+    try {
+        const response = await fetch('/api/active-map/', {
+            headers: {
+                'X-CSRFToken': csrftoken,
+            }
+        });
+        const data = await response.json();
+        
+        if (data.active_map) {
+            const mapImg = document.getElementById('activeMap');
+            const placeholder = document.getElementById('noMapPlaceholder');
+            
+            if (mapImg && mapImg.dataset.mapId !== String(data.active_map.id)) {
+                // Fade out, change, fade in
+                mapImg.style.opacity = '0';
+                setTimeout(() => {
+                    mapImg.src = data.active_map.image_url;
+                    mapImg.dataset.mapId = data.active_map.id;
+                    mapImg.style.opacity = '1';
+                }, 500);
+            } else if (placeholder && data.active_map) {
+                // Replace placeholder with map
+                location.reload(); // Simple reload for now
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing map:', error);
+    }
+}
+
+{% if user.is_superuser %}
+async function updateQueueCounter() {
+    try {
+        const response = await fetch('/api/pending-queue/', {
+            headers: {
+                'X-CSRFToken': csrftoken,
+            }
+        });
+        const data = await response.json();
+        
+        const badge = document.getElementById('queueBadge');
+        if (data.count > 0) {
+            badge.textContent = data.count;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error updating queue counter:', error);
+    }
+}
+
+// Update queue counter every 30 seconds
+setInterval(updateQueueCounter, 30000);
+updateQueueCounter(); // Initial call
+{% endif %}
+
+function createFeedItem(post, isNew = false) {
+    const div = document.createElement('div');
+    div.className = 'feed-item' + (isNew ? ' new' : '');
+    div.dataset.postId = post.id;
+    
+    div.innerHTML = `
+        <div>
+            <strong style="color: #ffaa00;">🎭 ${post.display_name}:</strong>
+            <span style="color: #eee;">${post.message}</span>
+        </div>
+    `;
+    
+    // Remove 'new' class after animation
+    if (isNew) {
+        setTimeout(() => div.classList.remove('new'), 3000);
+    }
+    
+    return div;
+}
+
+// ============================================================================
+// POLLING FALLBACK (if Supabase not configured)
+// ============================================================================
+
+function startPollingFallback() {
+    updateConnectionStatus('connecting');
+    
+    // Poll every 3 seconds
+    setInterval(() => {
+        refreshLiveFeed();
+        refreshActiveMap();
+        {% if user.is_superuser %}
+        updateQueueCounter();
+        {% endif %}
+    }, 3000);
+    
+    updateConnectionStatus('connected');
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+function updateConnectionStatus(status) {
+    connectionStatus = status;
+    const indicator = document.getElementById('connectionStatus');
+    if (indicator) {
+        indicator.className = 'connection-status ' + status;
+    }
+}
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'success' ? '✅' : type === 'map-change' ? '🗺️' : 'ℹ️';
+    toast.innerHTML = `
+        <span style="font-size: 1.5rem;">${icon}</span>
+        <span>${message}</span>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+function playNotificationSound() {
+    // Optional: play a subtle notification sound
+    // const audio = new Audio('/static/sounds/notification.mp3');
+    // audio.volume = 0.3;
+    // audio.play().catch(e => console.log('Sound play failed:', e));
+}
+
 function toggleUploadModal(show) {
     document.getElementById('uploadModal').style.display = show ? 'flex' : 'none';
 }
+
+// ============================================================================
+// DM MAP CHANGE HANDLER (Live Update)
+// ============================================================================
+
+function handleMapChange() {
+    const selector = document.getElementById('mapSelector');
+    const selectedOption = selector.options[selector.selectedIndex];
+    
+    if (!selectedOption || !selectedOption.value) {
+        console.log('No option selected');
+        return;
+    }
+    
+    const mapId = selectedOption.value;
+    const imageUrl = selectedOption.dataset.imageUrl;
+    const mapTitle = selectedOption.dataset.title;
+    
+    console.log('Map change triggered:', { mapId, imageUrl, mapTitle });
+    
+    // Immediately update the map on screen (live update!)
+    const mapImg = document.getElementById('activeMap');
+    const placeholder = document.getElementById('noMapPlaceholder');
+    const canvasPanel = mapImg ? mapImg.parentElement : placeholder.parentElement;
+    
+    if (mapImg) {
+        // Fade out, change, fade in
+        mapImg.style.opacity = '0';
+        setTimeout(() => {
+            mapImg.src = imageUrl;
+            mapImg.dataset.mapId = mapId;
+            mapImg.style.opacity = '1';
+        }, 250);
+    } else if (placeholder) {
+        // Replace placeholder with actual map
+        placeholder.remove();
+        const newImg = document.createElement('img');
+        newImg.className = 'map-frame';
+        newImg.id = 'activeMap';
+        newImg.src = imageUrl;
+        newImg.alt = 'Active Map Canvas';
+        newImg.dataset.mapId = mapId;
+        newImg.style.opacity = '0';
+        canvasPanel.appendChild(newImg);
+        setTimeout(() => newImg.style.opacity = '1', 100);
+    }
+    
+    // Show toast notification
+    showToast(`🗺️ Map changed to: ${mapTitle}`, 'map-change');
+    
+    // Submit the form in the background to save to database
+    // This ensures other players get the update too
+    const form = document.getElementById('mapChangeForm');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': csrftoken,
+        }
+    }).then(response => {
+        if (response.ok) {
+            console.log('✅ Map change saved to database');
+        } else {
+            console.error('⚠️ Failed to save map change');
+        }
+    }).catch(error => {
+        console.error('Error saving map change:', error);
+    });
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🎲 D&D Dashboard initialized');
+    
+    // Show initial connection status
+    {% if user.is_superuser %}
+    setTimeout(() => {
+        const statusMsg = connectionStatus === 'connected' 
+            ? '✅ Real-time updates active' 
+            : '⚠️ Using polling mode';
+        showToast(statusMsg, connectionStatus === 'connected' ? 'success' : 'info');
+    }, 1000);
+    {% endif %}
+});
 </script>
 
 </body>
