@@ -12,10 +12,12 @@ def campaign_dashboard(request):
     backgrounds = BackgroundAsset.objects.all()
     
     # 2. Track down which map layer is explicitly active for the table sessions
-    active_background = BackgroundAsset.objects.filter(
-        playerpost__status='APPROVED', 
-        playerpost__character_token__isnull=True
-    ).last()
+    latest_map_post = PlayerPost.objects.filter(
+    status='APPROVED',
+    character_token__isnull=True,
+    selected_background__isnull=False
+        ).order_by('-created_at').first()
+    active_background = latest_map_post.selected_background if latest_map_post else None
     
     # Default fallback to the first asset if the DM hasn't pushed a shift alert post yet
     if not active_background and backgrounds.exists():
@@ -202,10 +204,12 @@ def api_pending_queue(request):
 @login_required
 def api_active_map(request):
     """API endpoint to get current active map"""
-    active_background = BackgroundAsset.objects.filter(
-        playerpost__status='APPROVED', 
-        playerpost__character_token__isnull=True
-    ).last()
+    latest_map_post = PlayerPost.objects.filter(
+    status='APPROVED',
+    character_token__isnull=True,
+    selected_background__isnull=False
+        ).order_by('-created_at').first()
+    active_background = latest_map_post.selected_background if latest_map_post else None
     
     if not active_background:
         backgrounds = BackgroundAsset.objects.all()

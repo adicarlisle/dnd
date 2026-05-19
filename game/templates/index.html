@@ -471,18 +471,22 @@ function handleDatabaseChange(payload) {
     
     // Handle different event types
     if (eventType === 'INSERT') {
-        if (newRecord.status === 'PENDING') {
-            handleNewPendingSubmission(newRecord);
-        } else if (newRecord.status === 'APPROVED') {
-            handleNewApprovedAction(newRecord);
+    if (newRecord.status === 'PENDING') {
+        handleNewPendingSubmission(newRecord);
+    } else if (newRecord.status === 'APPROVED') {
+        if (newRecord.selected_background_id && !newRecord.character_token) {
+            handleRealtimeMapChange(newRecord);  // it's a map change post
+        } else {
+            handleNewApprovedAction(newRecord);  // it's a regular action
         }
-    } else if (eventType === 'UPDATE') {
+    }
+} else if (eventType === 'UPDATE') {
         if (oldRecord.status === 'PENDING' && newRecord.status === 'APPROVED') {
             handleActionApproved(newRecord);
         }
         // Check for map changes
         if (newRecord.selected_background_id && !newRecord.character_token) {
-            handleMapChange(newRecord);
+            handleRealtimeMapChange(newRecord);
         }
     }
 }
@@ -513,8 +517,7 @@ function handleActionApproved(record) {
     {% endif %}
 }
 
-function handleMapChange(record) {
-    // Update the active map
+function handleRealtimeMapChange(record) {
     refreshActiveMap();
     showToast(`🗺️ Map changed to new scene!`, 'map-change');
 }
